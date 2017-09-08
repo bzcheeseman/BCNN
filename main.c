@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "package/ops.h"
+#include "package/quantize_ops.h"
 
 int main() {
   int arr_size = 21;
