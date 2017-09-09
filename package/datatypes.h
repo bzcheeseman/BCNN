@@ -32,18 +32,16 @@ const int UINT32_SIZE=32;
 
 struct quantized_array {
   uint32_t *data;
-  int size;
-  int orig_size;
+  int nelements;
   int nbits; // also stride!
 };
 
 typedef struct quantized_array qarray;
 
 void print_qarray(qarray *arr) {
-  printf("qarray size: %d\n", arr->size);
   printf("qarray nbits: %d\n", arr->nbits);
-  printf("qarray individual elements: %d\n", arr->orig_size);
-  for (int i = 0; i < arr->size; i++) {
+  printf("qarray individual elements: %d\n", arr->nelements);
+  for (int i = 0; i < arr->nbits; i++) {
     printf("%u ", arr->data[i]);
   }
   printf("\n");

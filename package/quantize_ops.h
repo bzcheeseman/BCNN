@@ -29,7 +29,32 @@
 #include <stdint.h>
 #include <math.h>
 #include <float.h>
+#include <string.h>
 #include "datatypes.h"
+
+float *get_arr_window( // need to test this code
+        float *arr, // pointer to first element of array (gets changed in here)
+        size_t *arr_size, // size of array (gets changed in here)
+        const size_t window_size
+) {
+  if (*arr_size - window_size < 0 || window_size > UINT32_SIZE) {
+    return NULL;
+  }
+
+  float *out = calloc(window_size, sizeof(float));
+  memcpy(out, arr, window_size);
+  if (*arr_size - window_size > 0) {
+    arr += window_size; // advance pointer by window_size
+    *arr_size -= window_size;
+  }
+  else if (*arr_size - window_size == 0) {
+    arr = NULL;
+    *arr_size = 0;
+  }
+
+  return out;
+
+}
 
 qarray *quantize(
         float *arr,
@@ -40,45 +65,31 @@ qarray *quantize(
   if (!(__builtin_popcountll(nbits) == 1 && nbits <= 8)) {
     return NULL;
   }
-  const int q_size = (int)ceilf((float)arr_size/UINT32_SIZE * nbits);
-  // the output needs to be array size/32 * number of bits - size==32, bits=1 -> allocate 1 item in array
+  if (arr_size > 32) { // we want to do this in windows if the array is larger than 32
+    return NULL;
+  }
+
+  const int q_size = nbits; // nth item holds nth bit
+
   qarray *quantized = malloc(sizeof(qarray));
   quantized->data = calloc((size_t)q_size, sizeof(uint32_t));
-  quantized->size = q_size;
   quantized->nbits = nbits;
-  quantized->orig_size = (int)arr_size;
-//  printf("q_size: %d\n", q_size);
+  quantized->nelements = (int)arr_size;
 
-  uint32_t temp_val = 0;
-  float item; int leading_zeros = 0; int q_counter = 0, shift = 0;
+  float item; uint32_t temp_val = 0;
   for (int i = 0; i < arr_size; i++) {
     item = arr[i];
-    // Get sign bit
-    temp_val = ((uint32_t)1-signbit(item)) << nbits-1;
 
-    item = fabsf(item); // already stored sign bit, so get rid of that
-
-    // If nbits == 1 then we're done, skip to else
+    quantized->data[0] |= ((uint32_t)1-signbit(item)) << i;
     if (nbits != 1) {
-      // count leading zeros (excluding sign bit)
-      leading_zeros = __builtin_clz((uint32_t)item & 0x7fffffff);
-      // If we can't fully represent the number with nbits-1, then we gotta shift it over
-      if (UINT32_SIZE - leading_zeros >= nbits) {
-        temp_val ^= (uint32_t)item >> (UINT32_SIZE-leading_zeros-nbits+1);
+      item = fabsf(item);
+      // only take the fractional part
+      temp_val = (uint32_t)item & 0x7fffff;
+
+      // temp_val now holds the nbit representation of this item of the array (no sign bit)
+      for (int b = 1; b < nbits; b++) {
+        quantized->data[b] |= ((temp_val & (1 << nbits-b-1)) >> nbits-b-1) << i;
       }
-      else { // 32-leading zeros < nbits => we can fully represent the number with nbits-1
-        temp_val ^= (uint32_t)item; // just put those bits into temp_val
-      }
-//      printf("%u, %u\n", q_counter, temp_val);
-      // Add the bits into the quantized return value now
-      quantized->data[q_counter] |= temp_val << shift*nbits; shift++;
-      if (shift%(UINT32_SIZE/nbits) == 0 && shift != 0) {
-        q_counter++;
-        shift = 0;
-      }
-    }
-    else {
-      quantized->data[0] |= temp_val << i;
     }
   }
 
@@ -86,39 +97,29 @@ qarray *quantize(
 
 }
 
-float *dequantize(qarray *arr) {
-  float *out = (float *)calloc((size_t)arr->orig_size, sizeof(float));
+float *dequantize(
+        qarray *arr
+) {
+  float *out = (float *)calloc((size_t)arr->nelements, sizeof(float));
 
-  uint32_t mask = 0;
-  int k = 0;
-  while (k < arr->nbits) {
-    mask |= 1 << k;
-    k++;
-  }
-
-  uint32_t temp_value = 0; k = 0;
-  for (int i = 0; i < arr->size; i++) {
-    for (int j = 0; j < UINT32_SIZE ; j+= arr->nbits) {
-
-      if (k >= arr->orig_size) break;
-
-      temp_value = (arr->data[i] & (mask << j)) >> j;
-      temp_value ^= 1 << arr->nbits-1; // flip the first bit to standard convention (sign bit)
-//      printf("%u ", temp_value);
-      if (arr->nbits == 1) {
-        out[i * UINT32_SIZE / arr->nbits + j/arr->nbits] = temp_value == 1 ? -1.f : 1.f;
-//        printf("%.0f ", out[i * UINT32_SIZE / arr->nbits + j]);
+  uint32_t temp_val = 0;
+  for (int i = 0; i < arr->nelements; i++) {
+    int sign = 1-((arr->data[0] & (1 << i)) >> i); // set sign bit
+    if (arr->nbits == 1) {
+      out[i] = 1 - 2*sign;
+    }
+    else {
+      temp_val = 0;
+      for (int b = 1; b < arr->nbits; b++) {
+        temp_val |= ((arr->data[b] & (1 << i)) >> i) << arr->nbits-b-1;
       }
-      else {
-        out[i * UINT32_SIZE / arr->nbits + j/arr->nbits] = ((float)(temp_value & (mask>>1)) *
-                (temp_value >> (arr->nbits-1) == 1 ? -1.f : 1.f));
-//        printf("%f ", out[i * UINT32_SIZE / arr->nbits + j/arr->nbits]);
+      out[i] = (float)temp_val;
+      if (sign) {
+        out[i] *= -1;
       }
-
-      k++;
-
     }
   }
+
   return out;
 }
 
