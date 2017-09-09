@@ -31,8 +31,6 @@
 #include <float.h>
 #include "datatypes.h"
 
-static const int UINT32_SIZE=32;
-
 qarray *quantize(
         float *arr,
         const size_t arr_size,
@@ -45,7 +43,7 @@ qarray *quantize(
   const int q_size = (int)ceilf((float)arr_size/UINT32_SIZE * nbits);
   // the output needs to be array size/32 * number of bits - size==32, bits=1 -> allocate 1 item in array
   qarray *quantized = malloc(sizeof(qarray));
-  quantized->data = calloc(q_size, sizeof(uint32_t));
+  quantized->data = calloc((size_t)q_size, sizeof(uint32_t));
   quantized->size = q_size;
   quantized->nbits = nbits;
   quantized->orig_size = (int)arr_size;
@@ -89,7 +87,7 @@ qarray *quantize(
 }
 
 float *dequantize(qarray *arr) {
-  float *out = (float *)calloc(arr->orig_size, sizeof(float));
+  float *out = (float *)calloc((size_t)arr->orig_size, sizeof(float));
 
   uint32_t mask = 0;
   int k = 0;
