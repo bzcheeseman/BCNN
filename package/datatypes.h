@@ -36,15 +36,43 @@ struct quantized_array {
   int nbits; // also stride!
 };
 
-typedef struct quantized_array qarray;
+typedef struct quantized_array qtensor;
 
-void print_qarray(qarray *arr) {
+void print_qtensor(qtensor *arr) {
   printf("qarray nbits: %d\n", arr->nbits);
   printf("qarray individual elements: %d\n", arr->nelements);
   for (int i = 0; i < arr->nbits; i++) {
     printf("%u ", arr->data[i]);
   }
   printf("\n");
+}
+
+struct tensor_t {
+  float *data; // [i, j, k, l] = [i*c*h*w + j*h*w + k*w + l] = [((i*c + j)*h + k)*w + l]
+  int stride[3];
+  int dims[4]; // n, c, h, w
+};
+
+typedef struct tensor_t tensor;
+
+tensor *new_tensor(float *data, int n, int c, int h, int w) { // takes ownership of ptr
+  tensor *out = malloc(sizeof(tensor));
+  out->data = data;
+  out->dims[0] = n;
+  out->dims[1] = c;
+  out->dims[2] = h;
+  out->dims[3] = w;
+  out->stride[0] = c*h*w;
+  out->stride[1] = h*w;
+  out->stride[2] = w;
+
+  // tensor(i, j, k, l) = data[((i*stride[0] + j)*stride[1] + k)*stride[2] + l]
+}
+
+tensor *slice(tensor *in, int axis, int n_elements) {
+  tensor *out = malloc(sizeof(tensor));
+  // gotta get this to work...
+  return out;
 }
 
 #endif //BCNN_DATATYPES_H

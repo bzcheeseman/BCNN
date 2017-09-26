@@ -33,7 +33,7 @@
 #include "datatypes.h"
 
 float *get_arr_window( // need to test this code
-        float *arr, // pointer to first element of array (gets changed in here)
+        float **arr, // pointer to first element of array (gets changed in here)
         size_t *arr_size, // size of array (gets changed in here)
         const size_t window_size
 ) {
@@ -42,13 +42,13 @@ float *get_arr_window( // need to test this code
   }
 
   float *out = calloc(window_size, sizeof(float));
-  memcpy(out, arr, window_size);
+  memcpy(out, *arr, window_size*sizeof(float));
   if (*arr_size - window_size > 0) {
-    arr += window_size; // advance pointer by window_size
+    *arr += window_size; // advance pointer by window_size
     *arr_size -= window_size;
   }
   else if (*arr_size - window_size == 0) {
-    arr = NULL;
+    *arr = NULL;
     *arr_size = 0;
   }
 
@@ -56,7 +56,7 @@ float *get_arr_window( // need to test this code
 
 }
 
-qarray *quantize(
+qtensor *quantize(
         float *arr,
         const size_t arr_size,
         const int nbits
@@ -71,7 +71,7 @@ qarray *quantize(
 
   const int q_size = nbits; // nth item holds nth bit
 
-  qarray *quantized = malloc(sizeof(qarray));
+  qtensor *quantized = malloc(sizeof(qtensor));
   quantized->data = calloc((size_t)q_size, sizeof(uint32_t));
   quantized->nbits = nbits;
   quantized->nelements = (int)arr_size;
@@ -83,12 +83,14 @@ qarray *quantize(
     quantized->data[0] |= ((uint32_t)1-signbit(item)) << i;
     if (nbits != 1) {
       item = fabsf(item);
-      // only take the fractional part
-      temp_val = (uint32_t)item & 0x7fffff;
+      item *= powf(2, nbits);
+
+      // everything but the sign bit
+      temp_val = (uint32_t)item & 0x7fffffff;
 
       // temp_val now holds the nbit representation of this item of the array (no sign bit)
-      for (int b = 1; b < nbits; b++) {
-        quantized->data[b] |= ((temp_val & (1 << nbits-b-1)) >> nbits-b-1) << i;
+      for (int b = 0; b < nbits-1; b++) {
+        quantized->data[b+1] |= ((temp_val & (1 << nbits-b)) >> nbits-b) << i;
       }
     }
   }
@@ -98,7 +100,7 @@ qarray *quantize(
 }
 
 float *dequantize(
-        qarray *arr
+        qtensor *arr
 ) {
   float *out = (float *)calloc((size_t)arr->nelements, sizeof(float));
 
@@ -110,10 +112,10 @@ float *dequantize(
     }
     else {
       temp_val = 0;
-      for (int b = 1; b < arr->nbits; b++) {
-        temp_val |= ((arr->data[b] & (1 << i)) >> i) << arr->nbits-b-1;
+      for (int b = 0; b < arr->nbits-1; b++) {
+        temp_val |= ((arr->data[b+1] & (1 << i)) >> i) << arr->nbits-b;
       }
-      out[i] = (float)temp_val;
+      out[i] = (float)temp_val * powf(2, -arr->nbits);
       if (sign) {
         out[i] *= -1;
       }
