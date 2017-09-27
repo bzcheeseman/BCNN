@@ -41,8 +41,8 @@ typedef struct quantized_array qtensor;
 void print_qtensor(qtensor *arr) {
   printf("qarray nbits: %d\n", arr->nbits);
   printf("qarray individual elements: %d\n", arr->nelements);
-  for (int i = 0; i < arr->nbits; i++) {
-    printf("%u ", arr->data[i]);
+  for (int b = 0; b < arr->nbits; b++) {
+    printf("%u ", arr->data[b]);
   }
   printf("\n");
 }
